@@ -30,6 +30,14 @@ class _Expert(nn.Module):
         x = self.h4toh(x, fwd_expert_count)
         return x
 
+class _Expert_linear(nn.Module):
+    def __init__(self, num_expert, d_model, d_outsize, rank=0):
+        super().__init__()
+        self.linear = FMoELinear(num_expert, d_model, d_outsize, bias=True, rank=rank)
+
+    def forward(self, inp, fwd_expert_count):
+        x = self.linear(inp, fwd_expert_count)
+        return x
 
 class FMoETransformerMLP(FMoE):
     r"""
@@ -43,13 +51,21 @@ class FMoETransformerMLP(FMoE):
         num_expert=32,
         d_model=1024,
         d_hidden=4096,
+        d_outsize=None,
         activation=torch.nn.GELU(),
         expert_dp_comm="none",
         expert_rank=0,
+        use_linear=False, 
         **kwargs
     ):
+        if d_outsize==None:
+            d_outsize = d_model
+        self.d_outsize = d_outsize
         def one_expert(d_model):
-            return _Expert(1, d_model, d_hidden, activation, rank=0)
+            if use_linear==False:
+                return _Expert(1, d_model, d_hidden, d_outsize , activation, rank=0)
+            else:
+                return _Expert_linear(1, d_model, d_outsize, rank=0)
         
         expert = one_expert
         super().__init__(num_expert=num_expert, d_model=d_model, expert=expert, **kwargs)
@@ -60,7 +76,9 @@ class FMoETransformerMLP(FMoE):
         This module wraps up the FMoE module with reshape, residual and layer
         normalization.
         """
-        original_shape = inp.shape
+        original_shape = list(inp.shape)
+        assert original_shape[-1] == self.d_model
         inp = inp.reshape(-1, self.d_model)
         output = super().forward(inp)
+        original_shape[-1] = self.d_outsize 
         return output.reshape(original_shape)

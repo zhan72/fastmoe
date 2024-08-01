@@ -6,3 +6,4 @@ from .layers import FMoE
 from .linear import FMoELinear
 from .transformer import FMoETransformerMLP
 from .distributed import DistributedGroupedDataParallel
+from .SSL_moe import SSLfmoefy
